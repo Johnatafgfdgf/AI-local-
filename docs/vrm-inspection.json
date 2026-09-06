@@ -1,0 +1,43 @@
+{
+  "sha256": "dfe3a8a1c903b86c088319619c8acf9cbbfd9f2f6329f2323d896226d4694d77",
+  "bytes": 25614772,
+  "meta": {
+    "allowedUserName": "Everyone",
+    "author": "soun.dhaptics",
+    "commercialUssageName": "Disallow",
+    "licenseName": "Other",
+    "sexualUssageName": "Disallow",
+    "texture": 31,
+    "title": "Esme",
+    "version": "1.0",
+    "violentUssageName": "Allow",
+    "otherPermissionUrl": "https://hub.vroid.com/license?allowed_to_use_user=everyone&characterization_allowed_user=everyone&corporate_commercial_use=disallow&credit=necessary&modification=allow&personal_commercial_use=disallow&redistribution=allow&sexual_expression=disallow&version=1&violent_expression=allow",
+    "otherLicenseUrl": "https://hub.vroid.com/license?allowed_to_use_user=everyone&characterization_allowed_user=everyone&corporate_commercial_use=disallow&credit=necessary&modification=allow&personal_commercial_use=disallow&redistribution=allow&sexual_expression=disallow&version=1&violent_expression=allow"
+  },
+  "humanoidBones": 54,
+  "fingerJoints": 30,
+  "triangles": 57630,
+  "nodes": 151,
+  "meshes": 3,
+  "animations": 0,
+  "textures": 34,
+  "springGroups": 18,
+  "colliderGroups": 12,
+  "facePresets": [
+    "neutral",
+    "a",
+    "i",
+    "u",
+    "e",
+    "o",
+    "blink",
+    "blink_l",
+    "blink_r",
+    "angry",
+    "fun",
+    "joy",
+    "sorrow",
+    "unknown"
+  ],
+  "visualValidation": "not performed"
+}
