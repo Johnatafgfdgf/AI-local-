@@ -1,5 +1,7 @@
 package dev.nyra.local
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +52,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NyraApp(vm: NyraViewModel) {
+    val context = LocalContext.current
     val onboarded by vm.onboarded.collectAsStateWithLifecycle()
     if (!onboarded) {
         Welcome(vm::finishOnboarding)
@@ -61,6 +65,7 @@ fun NyraApp(vm: NyraViewModel) {
     val models by vm.models.collectAsStateWithLifecycle()
     val avatar by vm.avatar.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
+    val responseMode by vm.responseMode.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val importing by vm.importBusy.collectAsStateWithLifecycle()
     val avatarImporting by vm.avatarImportBusy.collectAsStateWithLifecycle()
@@ -70,6 +75,10 @@ fun NyraApp(vm: NyraViewModel) {
     val metrics by vm.metrics.collectAsStateWithLifecycle()
     val memoryEnabled by vm.memoryEnabled.collectAsStateWithLifecycle()
     val voiceStatus by vm.voiceStatus.collectAsStateWithLifecycle()
+    val voiceViseme by vm.voiceViseme.collectAsStateWithLifecycle()
+    val speechStatus by vm.speechStatus.collectAsStateWithLifecycle()
+    val speechListening by vm.speechListening.collectAsStateWithLifecycle()
+    val speechTranscript by vm.speechTranscript.collectAsStateWithLifecycle()
     val catalogModels = vm.catalogModels
 
     var tab by rememberSaveable { mutableStateOf("Chat") }
@@ -89,12 +98,30 @@ fun NyraApp(vm: NyraViewModel) {
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(vm::importAvatar)
     }
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.startListening()
+    }
+
+    LaunchedEffect(speechTranscript) {
+        if (speechTranscript.isNotBlank()) input = speechTranscript
+    }
+
+    val requestMicOrListen: () -> Unit = {
+        if (speechListening) {
+            vm.stopListening()
+        } else if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            vm.startListening()
+        } else {
+            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     val performance = AvatarPerformance(
         speaking = voiceStatus == "Falando",
         thinking = busy,
         happy = false,
-        energy = if (busy) 0.72f else 0.52f
+        energy = if (busy) 0.72f else 0.52f,
+        viseme = voiceViseme
     )
 
     ModalNavigationDrawer(
@@ -219,152 +246,34 @@ fun NyraApp(vm: NyraViewModel) {
                         busy = busy,
                         stream = stream,
                         input = input,
+                        responseMode = responseMode,
+                        speechListening = speechListening,
+                        speechStatus = speechStatus,
                         onInput = { input = it },
+                        onMic = requestMicOrListen,
+                        onCycleMode = {
+                            vm.setResponseMode(
+                                when (responseMode) {
+                                    ResponseMode.FAST -> ResponseMode.AUTO
+                                    ResponseMode.AUTO -> ResponseMode.THINK
+                                    ResponseMode.THINK -> ResponseMode.FAST
+                                }
+                            )
+                        },
                         onOpenModels = { tab = "Modelos" },
                         onOpenAvatar = { tab = "Avatar" }
                     )
 
-                    "Modelos" -> LazyColumn(
-                        Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        item {
-                            SectionTitle(
-                                "Baixar dentro do Nyra",
-                                "Escolha um modelo e toque em Baixar e instalar. O app faz o download, retoma se cair e verifica o SHA-256 antes de liberar o modelo."
-                            )
-                        }
-
-                        items(catalogModels, key = { it.id }) { model ->
-                            val installed = models.firstOrNull { it.name == model.fileName }
-                            val state = download?.takeIf { it.modelId == model.id }
-                            val fraction = if (state != null && state.total > 0L) {
-                                (state.done.toFloat() / state.total.toFloat()).coerceIn(0f, 1f)
-                            } else 0f
-
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Column(
-                                    Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(model.title, style = MaterialTheme.typography.titleMedium)
-                                            if (model.recommended) {
-                                                Text(
-                                                    "RECOMENDADO",
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            }
-                                        }
-                                        if (installed != null) {
-                                            Icon(Icons.Outlined.CheckCircle, "Instalado", tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                    }
-                                    Text(model.description, color = Color(0xFFB7ACCA))
-                                    Text(
-                                        "${model.sizeBytes / 1048576} MB • contexto ${model.contextTokens} • ${model.license}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-
-                                    if (state != null && (state.active || state.done in 1 until state.total)) {
-                                        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-                                        Text(
-                                            "${state.done / 1048576} MB / ${state.total / 1048576} MB • ${(fraction * 100).toInt()}%",
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    }
-
-                                    when {
-                                        installed != null -> {
-                                            Text(
-                                                if (installed.name == selected) "Instalado e em uso" else "Instalado",
-                                                color = MaterialTheme.colorScheme.primary,
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                            Row {
-                                                TextButton(onClick = { vm.selectModel(installed) }, enabled = !busy) {
-                                                    Text(if (installed.name == selected) "Em uso" else "Usar")
-                                                }
-                                                TextButton(
-                                                    onClick = { vm.deleteModel(installed) },
-                                                    enabled = !busy && !importing && download?.active != true
-                                                ) { Text("Excluir") }
-                                            }
-                                        }
-
-                                        state?.active == true -> {
-                                            OutlinedButton(onClick = vm::cancelDownload) {
-                                                Icon(Icons.Outlined.Pause, null)
-                                                Spacer(Modifier.width(8.dp))
-                                                Text("Pausar")
-                                            }
-                                        }
-
-                                        else -> {
-                                            Button(
-                                                onClick = { vm.downloadModel(model) },
-                                                enabled = !busy && !importing && download?.active != true
-                                            ) {
-                                                Icon(Icons.Outlined.Download, null)
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(if ((state?.done ?: 0L) > 0L) "Retomar" else "Baixar e instalar")
-                                            }
-                                        }
-                                    }
-
-                                    Text(
-                                        "O arquivo só vira um modelo instalado depois de passar pela verificação de tamanho e SHA-256.",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
-                        }
-
-                        item {
-                            HorizontalDivider()
-                            Spacer(Modifier.height(8.dp))
-                            SectionTitle(
-                                "Importação manual",
-                                "Opcional. Use isto apenas se você já tiver outro arquivo .litertlm compatível no celular."
-                            )
-                        }
-                        item {
-                            OutlinedButton(
-                                onClick = { modelPicker.launch(arrayOf("*/*")) },
-                                enabled = !busy && !importing && download?.active != true
-                            ) {
-                                Icon(Icons.Outlined.FileOpen, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Importar .litertlm")
-                            }
-                        }
-                        if (importing) {
-                            item {
-                                LinearProgressIndicator(Modifier.fillMaxWidth())
-                                TextButton(onClick = vm::cancelImport) { Text("Cancelar importação") }
-                            }
-                        }
-                        items(
-                            models.filter { file -> catalogModels.none { it.fileName == file.name } },
-                            key = { it.path }
-                        ) { file ->
-                            Card {
-                                Column(Modifier.padding(16.dp)) {
-                                    Text(file.name, style = MaterialTheme.typography.titleSmall)
-                                    Text("${file.length() / 1048576} MB • ${if (file.name == selected) "Selecionado" else "Instalado manualmente"}")
-                                    Row {
-                                        TextButton(onClick = { vm.selectModel(file) }, enabled = !busy) { Text("Usar") }
-                                        TextButton(
-                                            onClick = { vm.deleteModel(file) },
-                                            enabled = !busy && !importing && download?.active != true
-                                        ) { Text("Excluir") }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    "Modelos" -> ModelPage(
+                        vm = vm,
+                        models = models,
+                        selected = selected,
+                        busy = busy,
+                        importing = importing,
+                        download = download,
+                        catalogModels = catalogModels,
+                        onManualImport = { modelPicker.launch(arrayOf("*/*")) }
+                    )
 
                     "Memória" -> LazyColumn(
                         Modifier.padding(20.dp),
@@ -441,8 +350,12 @@ fun NyraApp(vm: NyraViewModel) {
                         item {
                             SectionTitle(
                                 "Privacidade",
-                                "A internet é usada para baixar modelos que você escolher. Depois de instalados, inferência, histórico, memória, voz e avatar continuam no aparelho."
+                                "A internet é usada para baixar modelos que você escolher. Depois de instalados, inferência, histórico, memória, voz, ditado e avatar continuam no aparelho."
                             )
+                        }
+                        item {
+                            SectionTitle("Modo de resposta", "Escolha entre menor latência, equilíbrio automático e análise mais cuidadosa.")
+                            ResponseModeChips(responseMode, vm::setResponseMode)
                         }
                         item {
                             SectionTitle("Voz", voiceStatus)
@@ -451,13 +364,17 @@ fun NyraApp(vm: NyraViewModel) {
                                 TextButton(onClick = vm::stop) { Text("Parar") }
                             }
                         }
-                        item { SectionTitle("Dispositivo", remember { vm.deviceInfo() }) }
+                        item {
+                            SectionTitle("Ditado", speechStatus)
+                            Text("O Nyra usa apenas o reconhecedor on-device do Android. Se o pacote offline não existir, ele não troca silenciosamente para nuvem.")
+                        }
+                        item { SectionTitle("Dispositivo", remember(responseMode) { vm.deviceInfo() }) }
                         item { SectionTitle("Medições da última resposta", metrics) }
                         item { TextButton(onClick = vm::releaseModel, enabled = !busy) { Text("Liberar modelo da RAM") } }
                         item {
                             SectionTitle(
                                 "Sobre",
-                                "Nyra 0.2.0-dev • inferência local + modelos + memória + renderer VRM nativo\nSTT dedicado, PurpleCore completo, embeddings e atuação corporal avançada continuam como próximos marcos."
+                                "Nyra 0.2.0-dev • inferência local + modelos + memória + renderer VRM nativo + TTS/STT offline + lip sync por ranges\nPurpleCore já possui governor térmico/RAM; GPU/NPU, embeddings e atuação corporal avançada ainda exigem benchmark e calibração real."
                             )
                         }
                     }
@@ -501,6 +418,22 @@ fun NyraApp(vm: NyraViewModel) {
 }
 
 @Composable
+private fun ResponseModeChips(current: ResponseMode, select: (ResponseMode) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ResponseMode.entries.forEach { mode ->
+            FilterChip(
+                selected = current == mode,
+                onClick = { select(mode) },
+                label = { Text(mode.label) },
+                leadingIcon = if (current == mode) {
+                    { Icon(Icons.Outlined.Check, null, modifier = Modifier.size(16.dp)) }
+                } else null
+            )
+        }
+    }
+}
+
+@Composable
 private fun ChatPage(
     vm: NyraViewModel,
     modelsEmpty: Boolean,
@@ -510,7 +443,12 @@ private fun ChatPage(
     busy: Boolean,
     stream: String,
     input: String,
+    responseMode: ResponseMode,
+    speechListening: Boolean,
+    speechStatus: String,
     onInput: (String) -> Unit,
+    onMic: () -> Unit,
+    onCycleMode: () -> Unit,
     onOpenModels: () -> Unit,
     onOpenAvatar: () -> Unit
 ) {
@@ -523,21 +461,14 @@ private fun ChatPage(
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF100B18))
         ) {
-            NativeAvatarView(
-                file = avatar.file,
-                performance = performance,
-                modifier = Modifier.fillMaxSize()
-            )
+            NativeAvatarView(file = avatar.file, performance = performance, modifier = Modifier.fillMaxSize())
         }
     } else {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1B1327))
         ) {
-            Row(
-                Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.PersonOutline, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -560,7 +491,7 @@ private fun ChatPage(
                 if (modelsEmpty) {
                     "A Nyra ainda precisa de um cérebro local. Você pode baixar e instalar o modelo recomendado sem sair do app."
                 } else {
-                    "Escreva uma pergunta para começar. O histórico e as memórias ficam neste aparelho."
+                    "Escreva ou fale uma pergunta. O histórico e as memórias ficam neste aparelho."
                 },
                 color = Color(0xFFB7ACCA)
             )
@@ -579,9 +510,7 @@ private fun ChatPage(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(messages, key = { it.id }) { message ->
-                val text = if (message.state == "generating" && busy) {
-                    stream.ifEmpty { "Pensando localmente…" }
-                } else message.text
+                val text = if (message.state == "generating" && busy) stream.ifEmpty { "Pensando localmente…" } else message.text
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -617,20 +546,45 @@ private fun ChatPage(
         }
     }
 
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onCycleMode, enabled = !busy) {
+            Icon(
+                when (responseMode) {
+                    ResponseMode.FAST -> Icons.Outlined.Bolt
+                    ResponseMode.AUTO -> Icons.Outlined.AutoAwesome
+                    ResponseMode.THINK -> Icons.Outlined.Psychology
+                },
+                null
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(responseMode.label)
+        }
+        if (speechListening) {
+            Text(speechStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+
     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             input,
             onInput,
-            placeholder = { Text("Fale com a Nyra") },
+            placeholder = { Text(if (speechListening) "Escutando…" else "Fale com a Nyra") },
             modifier = Modifier.weight(1f),
             maxLines = 4,
             shape = RoundedCornerShape(24.dp)
         )
+        IconButton(onClick = onMic, enabled = !busy) {
+            Icon(
+                if (speechListening) Icons.Outlined.StopCircle else Icons.Outlined.Mic,
+                if (speechListening) "Parar ditado" else "Ditado offline"
+            )
+        }
         IconButton(
             onClick = if (busy) vm::stop else if (input.isNotBlank()) {
-                {
-                    if (vm.send(input)) onInput("")
-                }
+                { if (vm.send(input)) onInput("") }
             } else {
                 {}
             },
@@ -645,6 +599,106 @@ private fun ChatPage(
 }
 
 @Composable
+private fun ModelPage(
+    vm: NyraViewModel,
+    models: List<java.io.File>,
+    selected: String?,
+    busy: Boolean,
+    importing: Boolean,
+    download: ModelDownloadState?,
+    catalogModels: List<CatalogModel>,
+    onManualImport: () -> Unit
+) {
+    LazyColumn(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            SectionTitle(
+                "Baixar dentro do Nyra",
+                "Escolha um modelo e toque em Baixar e instalar. O app retoma se a rede cair e verifica o SHA-256 antes de liberar o modelo."
+            )
+        }
+        items(catalogModels, key = { it.id }) { model ->
+            val installed = models.firstOrNull { it.name == model.fileName }
+            val state = download?.takeIf { it.modelId == model.id }
+            val fraction = if (state != null && state.total > 0L) {
+                (state.done.toFloat() / state.total.toFloat()).coerceIn(0f, 1f)
+            } else 0f
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(model.title, style = MaterialTheme.typography.titleMedium)
+                            if (model.recommended) {
+                                Text("RECOMENDADO", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        if (installed != null) Icon(Icons.Outlined.CheckCircle, "Instalado", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Text(model.description, color = Color(0xFFB7ACCA))
+                    Text("${model.sizeBytes / 1048576} MB • contexto ${model.contextTokens} • ${model.license}", style = MaterialTheme.typography.bodySmall)
+                    if (state != null && (state.active || state.done in 1 until state.total)) {
+                        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                        Text("${state.done / 1048576} MB / ${state.total / 1048576} MB • ${(fraction * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                    }
+                    when {
+                        installed != null -> {
+                            Text(if (installed.name == selected) "Instalado e em uso" else "Instalado", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                            Row {
+                                TextButton(onClick = { vm.selectModel(installed) }, enabled = !busy) { Text(if (installed.name == selected) "Em uso" else "Usar") }
+                                TextButton(onClick = { vm.deleteModel(installed) }, enabled = !busy && !importing && download?.active != true) { Text("Excluir") }
+                            }
+                        }
+                        state?.active == true -> {
+                            OutlinedButton(onClick = vm::cancelDownload) {
+                                Icon(Icons.Outlined.Pause, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Pausar")
+                            }
+                        }
+                        else -> {
+                            Button(onClick = { vm.downloadModel(model) }, enabled = !busy && !importing && download?.active != true) {
+                                Icon(Icons.Outlined.Download, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(if ((state?.done ?: 0L) > 0L) "Retomar" else "Baixar e instalar")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            SectionTitle("Importação manual", "Opcional, para outro arquivo .litertlm compatível que já esteja no celular.")
+        }
+        item {
+            OutlinedButton(onClick = onManualImport, enabled = !busy && !importing && download?.active != true) {
+                Icon(Icons.Outlined.FileOpen, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Importar .litertlm")
+            }
+        }
+        if (importing) {
+            item {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                TextButton(onClick = vm::cancelImport) { Text("Cancelar importação") }
+            }
+        }
+        items(models.filter { file -> catalogModels.none { it.fileName == file.name } }, key = { it.path }) { file ->
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text(file.name, style = MaterialTheme.typography.titleSmall)
+                    Text("${file.length() / 1048576} MB • ${if (file.name == selected) "Selecionado" else "Instalado manualmente"}")
+                    Row {
+                        TextButton(onClick = { vm.selectModel(file) }, enabled = !busy) { Text("Usar") }
+                        TextButton(onClick = { vm.deleteModel(file) }, enabled = !busy && !importing && download?.active != true) { Text("Excluir") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AvatarPage(
     avatar: AvatarDescriptor?,
     performance: AvatarPerformance,
@@ -653,10 +707,7 @@ private fun AvatarPage(
     onCancelImport: () -> Unit,
     onDelete: () -> Unit
 ) {
-    LazyColumn(
-        Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             SectionTitle(
                 "Presença 3D",
@@ -670,11 +721,7 @@ private fun AvatarPage(
                     shape = RoundedCornerShape(30.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF0D0913))
                 ) {
-                    NativeAvatarView(
-                        file = avatar.file,
-                        performance = performance,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    NativeAvatarView(file = avatar.file, performance = performance, modifier = Modifier.fillMaxSize())
                 }
             }
             item {
@@ -703,7 +750,7 @@ private fun AvatarPage(
             }
             item {
                 Text(
-                    "A atuação inicial já inclui respiração sutil, movimento de cabeça/pescoço, piscadas e morphs A/I/U/E/O durante a fala. O toque na área 3D permite orbitar e dar zoom.",
+                    "A atuação inicial inclui respiração sutil, cabeça/pescoço, piscadas e A/I/U/E/O sincronizados aos ranges reais do TTS offline. O toque na área 3D permite orbitar e dar zoom.",
                     color = Color(0xFFB7ACCA)
                 )
             }
@@ -713,7 +760,7 @@ private fun AvatarPage(
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Outlined.ViewInAr, null, tint = MaterialTheme.colorScheme.primary)
                         Text("Importe o VRM da Nyra", style = MaterialTheme.typography.titleLarge)
-                        Text("Selecione o arquivo 4024685333778527948.vrm.glb que você já possui. O Nyra valida o GLB/VRM, copia de forma atômica e passa a carregá-lo automaticamente nas próximas aberturas.")
+                        Text("Selecione o arquivo 4024685333778527948.vrm.glb. O Nyra valida o GLB/VRM, copia de forma atômica e passa a carregá-lo automaticamente nas próximas aberturas.")
                         Button(onClick = onImport, enabled = !importing) {
                             Icon(Icons.Outlined.FileOpen, null)
                             Spacer(Modifier.width(8.dp))
@@ -766,13 +813,7 @@ private fun Welcome(done: () -> Unit) {
     ) {
         Text("LOCAL • PESSOAL • CONFIGURÁVEL", color = Color(0xFFC3A4FF), fontSize = 11.sp)
         Spacer(Modifier.height(32.dp))
-        Text(
-            titles[page],
-            color = Color.White,
-            fontSize = 42.sp,
-            lineHeight = 46.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        Text(titles[page], color = Color.White, fontSize = 42.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(24.dp))
         Text(descriptions[page], color = Color(0xFFCCBFD9), fontSize = 17.sp)
         Spacer(Modifier.height(48.dp))
