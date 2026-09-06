@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nyra.local"
         minSdk = 31
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1-dev"
+        versionCode = 3
+        versionName = "0.2.0-dev"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
@@ -26,6 +26,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.ui:ui")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
     implementation("androidx.room:room-runtime:2.7.2")
@@ -34,5 +35,11 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
+
+    // Native 3D renderer. This is a dedicated Filament surface inside Compose, not a WebView.
+    implementation("com.google.android.filament:filament-android:1.75.1")
+    implementation("com.google.android.filament:gltfio-android:1.75.1")
+    implementation("com.google.android.filament:filament-utils-android:1.75.1")
+
     testImplementation("junit:junit:4.13.2")
 }
