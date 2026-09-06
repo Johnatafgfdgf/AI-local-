@@ -30,7 +30,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import kotlin.math.sin
 
-/** Runtime acting state. It represents performance, not real feelings. */
 data class AvatarPerformance(
     val speaking: Boolean = false,
     val thinking: Boolean = false,
@@ -39,33 +38,20 @@ data class AvatarPerformance(
     val viseme: String? = null
 )
 
-/** Native Filament SurfaceView embedded inside Compose. No browser/WebView is involved. */
 @Composable
-fun NativeAvatarView(
-    file: File,
-    performance: AvatarPerformance,
-    modifier: Modifier = Modifier
-) {
+fun NativeAvatarView(file: File, performance: AvatarPerformance, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val surface = remember(file.absolutePath) { NyraAvatarSurface(context) }
-
     LaunchedEffect(file.absolutePath) { surface.load(file) }
     LaunchedEffect(performance) { surface.performance = performance }
     DisposableEffect(surface) { onDispose { surface.release() } }
-
     Box(modifier) {
-        AndroidView(
-            factory = { surface },
-            modifier = Modifier.fillMaxSize(),
-            update = { it.performance = performance }
-        )
+        AndroidView(factory = { surface }, modifier = Modifier.fillMaxSize(), update = { it.performance = performance })
     }
 }
 
 private class NyraAvatarSurface(context: Context) : SurfaceView(context), Choreographer.FrameCallback {
-    companion object {
-        init { Utils.init() }
-    }
+    companion object { init { Utils.init() } }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val viewer = ModelViewer(this)
@@ -76,7 +62,6 @@ private class NyraAvatarSurface(context: Context) : SurfaceView(context), Choreo
     private var modelPath: String? = null
     private var rig: VrmRig? = null
     private var startNanos = 0L
-
     @Volatile var performance: AvatarPerformance = AvatarPerformance()
 
     init {
@@ -87,9 +72,7 @@ private class NyraAvatarSurface(context: Context) : SurfaceView(context), Choreo
             enabled = true
             quality = View.QualityLevel.MEDIUM
         }
-        viewer.view.renderQuality = viewer.view.renderQuality.apply {
-            hdrColorBuffer = View.QualityLevel.MEDIUM
-        }
+        viewer.view.renderQuality = viewer.view.renderQuality.apply { hdrColorBuffer = View.QualityLevel.MEDIUM }
     }
 
     fun load(file: File) {
@@ -137,10 +120,10 @@ private class NyraAvatarSurface(context: Context) : SurfaceView(context), Choreo
 
     override fun onDetachedFromWindow() {
         choreographer.removeFrameCallback(this)
-        super.onDetachedFromWindow()
         released = true
         loadJob?.cancel()
         scope.cancel()
+        super.onDetachedFromWindow()
     }
 
     override fun doFrame(frameTimeNanos: Long) {
@@ -161,11 +144,11 @@ private class NyraAvatarSurface(context: Context) : SurfaceView(context), Choreo
         choreographer.removeFrameCallback(this)
         loadJob?.cancel()
         scope.cancel()
-        if (isAttachedToWindow) runCatching { viewer.destroy() }
+        // ModelViewer installs its own detach listener and destroys its engine there. Calling
+        // destroy() here as well could double-destroy native Filament resources.
     }
 }
 
-/** Initial VRM 0.x actuator calibrated to the supplied Esme rig. */
 private class VrmRig(private val viewer: ModelViewer) {
     private val tm get() = viewer.engine.transformManager
     private val rm get() = viewer.engine.renderableManager
@@ -179,7 +162,6 @@ private class VrmRig(private val viewer: ModelViewer) {
     private val chest = "J_Bip_C_Chest"
     private val leftUpperArm = "J_Bip_L_UpperArm"
     private val rightUpperArm = "J_Bip_R_UpperArm"
-
     private val funFace = 2
     private val joy = 3
     private val blink = 13
@@ -202,20 +184,16 @@ private class VrmRig(private val viewer: ModelViewer) {
                 }
             }
         }
-
         val rootInstance = tm.getInstance(asset.root)
         if (rootInstance != 0) {
             rootBind = FloatArray(16).also { tm.getTransform(rootInstance, it) }
             setEntityDelta(asset.root, rootBind!!, 0f, 180f, 0f)
             rootBind = FloatArray(16).also { tm.getTransform(rootInstance, it) }
         }
-
         val faceEntity = asset.getFirstEntityByName("Face")
         if (faceEntity != 0 && rm.hasComponent(faceEntity)) {
             faceInstance = rm.getInstance(faceEntity)
-            if (faceInstance != 0) {
-                weights = FloatArray(rm.getMorphTargetCount(faceInstance).coerceAtLeast(0))
-            }
+            if (faceInstance != 0) weights = FloatArray(rm.getMorphTargetCount(faceInstance).coerceAtLeast(0))
         }
     }
 
@@ -223,23 +201,17 @@ private class VrmRig(private val viewer: ModelViewer) {
         val energy = p.energy.coerceIn(0.15f, 1f)
         val breath = sin(t * (1.45f + energy * 0.35f))
         val micro = sin(t * 0.61f) * 0.5f + sin(t * 0.37f) * 0.5f
-
-        pose(head,
-            x = if (p.thinking) -5.5f else 1.2f * breath,
-            y = if (p.thinking) 8.0f else 2.2f * micro,
-            z = if (p.thinking) -3.5f else 0.7f * micro
-        )
-        pose(neck, x = 0.8f * breath, y = 0.8f * micro, z = 0f)
-        pose(chest, x = 1.1f * breath, y = 0.45f * micro, z = 0f)
-        pose(leftUpperArm, x = 0f, y = 0f, z = 1.4f * breath)
-        pose(rightUpperArm, x = 0f, y = 0f, z = -1.4f * breath)
+        pose(head, if (p.thinking) -5.5f else 1.2f * breath, if (p.thinking) 8.0f else 2.2f * micro, if (p.thinking) -3.5f else 0.7f * micro)
+        pose(neck, 0.8f * breath, 0.8f * micro, 0f)
+        pose(chest, 1.1f * breath, 0.45f * micro, 0f)
+        pose(leftUpperArm, 0f, 0f, 1.4f * breath)
+        pose(rightUpperArm, 0f, 0f, -1.4f * breath)
         updateFace(t, p)
     }
 
     private fun updateFace(t: Float, p: AvatarPerformance) {
         if (faceInstance == 0 || weights.isEmpty()) return
         java.util.Arrays.fill(weights, 0f)
-
         val blinkPhase = t % 4.35f
         val blinkValue = when {
             blinkPhase < 0.075f -> blinkPhase / 0.075f
@@ -248,12 +220,10 @@ private class VrmRig(private val viewer: ModelViewer) {
             else -> 0f
         }.coerceIn(0f, 1f)
         setWeight(blink, blinkValue)
-
         when {
             p.happy -> setWeight(joy, 0.42f)
             p.thinking -> setWeight(funFace, 0.12f)
         }
-
         if (p.speaking) {
             val openness = (0.56f + 0.18f * (0.5f + 0.5f * sin(t * 18f))).coerceIn(0f, 0.9f)
             when (p.viseme) {
@@ -265,7 +235,6 @@ private class VrmRig(private val viewer: ModelViewer) {
                 else -> setWeight(vowelA, openness * 0.35f)
             }
         }
-
         runCatching { rm.setMorphWeights(faceInstance, weights, 0) }
     }
 
@@ -277,8 +246,7 @@ private class VrmRig(private val viewer: ModelViewer) {
         val asset = viewer.asset ?: return
         val base = bind[name] ?: return
         val entity = asset.getFirstEntityByName(name)
-        if (entity == 0) return
-        setEntityDelta(entity, base, x, y, z)
+        if (entity != 0) setEntityDelta(entity, base, x, y, z)
     }
 
     private fun setEntityDelta(entity: Int, base: FloatArray, x: Float, y: Float, z: Float) {
