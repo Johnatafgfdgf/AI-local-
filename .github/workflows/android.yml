@@ -4,10 +4,9 @@ on:
     branches:
       - main
       - 'nyra/**'
-  pull_request:
   workflow_dispatch:
 concurrency:
-  group: android-${{ github.ref }}
+  group: android-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
@@ -26,11 +25,15 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
-      - run: gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --stacktrace
+      - name: Build, test and lint
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --stacktrace 2>&1 | tee build.log
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: Nyra-0.1.1-debug-arm64
+          name: Nyra-0.2.0-debug-arm64
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -38,5 +41,7 @@ jobs:
         with:
           name: verification-reports
           path: |
+            build.log
             app/build/reports/
             app/schemas/
+          if-no-files-found: warn
