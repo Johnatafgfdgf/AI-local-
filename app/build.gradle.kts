@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nyra.local"
         minSdk = 31
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0-dev"
+        versionCode = 4
+        versionName = "0.2.1-dev"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
@@ -36,7 +36,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
 
-    // Native 3D renderer. This is a dedicated Filament surface inside Compose, not a WebView.
+    // Native 3D renderer. TextureView keeps Filament in the normal Android compositor hierarchy,
+    // avoiding SurfaceView punch-through artifacts inside Compose drawers and scrolling cards.
     implementation("com.google.android.filament:filament-android:1.75.1")
     implementation("com.google.android.filament:gltfio-android:1.75.1")
     implementation("com.google.android.filament:filament-utils-android:1.75.1")
