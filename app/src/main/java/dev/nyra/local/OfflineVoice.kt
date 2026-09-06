@@ -22,12 +22,16 @@ class OfflineVoice(
             if (code == TextToSpeech.SUCCESS) {
                 val voice = tts?.voices
                     ?.filter { !it.isNetworkConnectionRequired && it.locale.language == "pt" }
-                    ?.sortedWith(compareByDescending<android.speech.tts.Voice> { it.locale.country == "BR" }
-                        .thenByDescending { it.quality })
+                    ?.sortedWith(
+                        compareByDescending<android.speech.tts.Voice> { it.locale.country == "BR" }
+                            .thenByDescending { it.quality }
+                    )
                     ?.firstOrNull()
                 if (voice != null) {
                     tts?.voice = voice
                     tts?.language = Locale("pt", "BR")
+                    tts?.setSpeechRate(0.98f)
+                    tts?.setPitch(1.02f)
                     ready = true
                     status("Voz offline pronta")
                 } else {
@@ -44,22 +48,20 @@ class OfflineVoice(
             }
 
             override fun onDone(id: String?) {
-                if (id == active) {
-                    active = null
-                    activeText = ""
-                    viseme(null)
-                    status("Voz offline pronta")
-                }
+                finishUtterance(id, "Voz offline pronta")
+            }
+
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                finishUtterance(utteranceId, if (ready) "Voz offline pronta" else "Voz interrompida")
             }
 
             @Deprecated("Android callback")
             override fun onError(id: String?) {
-                if (id == active) {
-                    active = null
-                    activeText = ""
-                    viseme(null)
-                    status("Falha na voz")
-                }
+                finishUtterance(id, "Falha na voz")
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                finishUtterance(utteranceId, "Falha na voz")
             }
 
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
@@ -72,14 +74,34 @@ class OfflineVoice(
         })
     }
 
+    private fun finishUtterance(id: String?, finalStatus: String) {
+        if (id != active) return
+        active = null
+        activeText = ""
+        viseme(null)
+        status(finalStatus)
+    }
+
     fun speak(text: String) {
         if (!ready) {
             status("Nenhuma voz portuguesa offline disponível")
             return
         }
-        stop()
+
+        // Do not call the public stop() here because it would briefly publish "pronta" between two
+        // utterances and make the UI flicker. Reset the engine silently, then start the new id.
+        active = null
+        activeText = ""
+        viseme(null)
+        tts?.stop()
+
         activeText = text.take(TextToSpeech.getMaxSpeechInputLength())
+        if (activeText.isBlank()) {
+            status("Voz offline pronta")
+            return
+        }
         active = UUID.randomUUID().toString()
+        status("Preparando voz…")
         val result = tts?.speak(activeText, TextToSpeech.QUEUE_FLUSH, null, active)
         if (result != TextToSpeech.SUCCESS) {
             active = null
@@ -94,11 +116,16 @@ class OfflineVoice(
         activeText = ""
         viseme(null)
         tts?.stop()
+        // Previously the UI could stay permanently on "Falando" because active was cleared before
+        // Android delivered onStop/onDone. Publish the terminal state synchronously.
+        if (ready) status("Voz offline pronta")
     }
 
     fun close() {
         stop()
         tts?.shutdown()
+        tts = null
+        ready = false
     }
 
     private fun visemeFor(text: String): String? {
