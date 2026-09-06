@@ -34,7 +34,7 @@ Reutilizar conceitos de mapeamento humanoide, camadas faciais, upload de avatar 
 
 ## VRM fornecido
 
-Esme 1.0 / soun.dhaptics. 25,614,772 bytes. VRM 0.x, 151 nós, 3 meshes, 3 skins, 18 materiais, 34 texturas. 55 ossos humanoides, incluindo 30 articulações de dedos. Sem animações GLTF. Presets neutral/a/i/u/e/o/blink/blink_l/blink_r/angry/fun/joy/sorrow/unknown.
+Esme 1.0 / soun.dhaptics. 25,614,772 bytes. VRM 0.x, 151 nós, 3 meshes, 3 skins, 18 materiais, 34 texturas. 54 ossos humanoides, incluindo 30 articulações de dedos. Sem animações GLTF. Presets neutral/a/i/u/e/o/blink/blink_l/blink_r/angry/fun/joy/sorrow/unknown.
 
 Metadados e URL incorporada proíbem uso comercial e exigem crédito; indicam modificação e redistribuição permitidas. A página da licença não pôde ser carregada nesta sessão; interpretação limitada aos metadados. Perfil JSON extraído separadamente. Limites articulares específicos e qualidade visual ainda não calibrados: não inferir da existência dos ossos que os gestos estão prontos.
 

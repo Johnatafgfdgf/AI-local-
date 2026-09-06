@@ -27,6 +27,7 @@ data class ChatMessage(
     @Query("SELECT * FROM ChatMessage WHERE chatId=:id ORDER BY created, rowid") suspend fun history(id: String): List<ChatMessage>
     @Query("SELECT * FROM Memory ORDER BY pinned DESC, updated DESC") fun memories(): Flow<List<Memory>>
     @Query("SELECT * FROM Memory ORDER BY pinned DESC, updated DESC") suspend fun memorySnapshot(): List<Memory>
+    @Query("UPDATE Chat SET updated=:time WHERE id=:id") suspend fun touchChat(id: String, time: Long)
     @Upsert suspend fun put(chat: Chat)
     @Upsert suspend fun put(message: ChatMessage)
     @Upsert suspend fun put(memory: Memory)

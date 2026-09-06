@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                         }
                         Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
                             OutlinedTextField(input,{input=it},placeholder={Text("Fale com a Nyra")},modifier=Modifier.weight(1f),maxLines=4,shape=RoundedCornerShape(24.dp))
-                            IconButton(onClick={if(busy) vm.stop() else if(input.isNotBlank()){ vm.send(input); input="" }},enabled=busy || input.isNotBlank()) { Icon(if(busy) Icons.Outlined.StopCircle else Icons.Outlined.ArrowUpward,if(busy) "Interromper geração" else "Enviar mensagem") }
+                            IconButton(onClick={if(busy) vm.stop() else if(input.isNotBlank()){ if(vm.send(input)) input="" }},enabled=busy || input.isNotBlank()) { Icon(if(busy) Icons.Outlined.StopCircle else Icons.Outlined.ArrowUpward,if(busy) "Interromper geração" else "Enviar mensagem") }
                         }
                     }
                     "Modelos" -> LazyColumn(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
