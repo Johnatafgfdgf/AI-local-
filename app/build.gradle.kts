@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nyra.local"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = 2
+        versionName = "0.1.1-dev"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
