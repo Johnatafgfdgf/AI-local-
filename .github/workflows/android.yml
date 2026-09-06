@@ -1,8 +1,12 @@
 name: Android debug verification
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

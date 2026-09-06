@@ -47,7 +47,7 @@ class LiteRtBackend(private val cache: File) : InferenceBackend {
             try {
                 currentCoroutineContext().ensureActive()
                 conv.sendMessageAsync(input, object : MessageCallback {
-                    override fun onMessage(message: Message) { if (!cancelled) onText(message.text) }
+                    override fun onMessage(message: Message) { if (!cancelled) onText(message.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }) }
                     override fun onDone() { terminal.complete(Unit) }
                     override fun onError(throwable: Throwable) { terminal.completeExceptionally(throwable) }
                 }, maxOutputToken = 512)
